@@ -12,6 +12,9 @@ import numpy as np
 # kappa: number of iterations for optimziation
 # AAA_type: 'sin' or 'lin'. See paper
 def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):    
+    device = z.device
+    z = z.detach()
+    
     l_org = L(z, y).item()
     l_atr = (np.floor(l_org / tau) + 1/2) * tau
     if AAA_type == 'sin': 
@@ -23,7 +26,7 @@ def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):
     
     u = z.clone().detach()
     u.requires_grad = True
-    u = u.to(z.device)
+    u = u.to(device)
     
     with torch.enable_grad():
         optimizer = torch.optim.AdamW([u], lr=lr)
