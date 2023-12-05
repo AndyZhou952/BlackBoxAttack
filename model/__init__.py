@@ -1,1 +1,1 @@
-from butterfly_classifier import Classifier
+import timm
