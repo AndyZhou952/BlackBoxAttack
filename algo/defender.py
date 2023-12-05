@@ -52,7 +52,9 @@ class AAAProtectedClassifier(nn.Module):
         
     def forward(self, x):
         x = x.to(device = next(self.model.parameters()).device)
-        org_logits = self.model(x)
+        model.eval()
+        with torch.no_grad():
+            org_logits = self.model(x)
         pred_y = org_logits.argmax().view(1)
         
         protected_logits = AAA(z=org_logits, y=pred_y, L=self.L,
