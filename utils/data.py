@@ -60,7 +60,8 @@ def create_butterfly_dataset(path = './data/butterfly/'):
                 if label == '.ipynb_checkpoints':
                     continue
                 tpaths0+=[(path,normal_mapping[label])]
-
+                
+    random.seed(123)
     random.shuffle(paths0)            
     random.shuffle(tpaths0)  
 
