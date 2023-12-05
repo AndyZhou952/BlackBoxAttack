@@ -1,8 +1,8 @@
 import torch
 from torch.utils.data import DataLoader
 
-def train_classifier(model, train_loader, test_loader, optimizer, criterion, epoch, device):
-    model = model.to(device)
+def train_classifier(model, train_loader, test_loader, optimizer, criterion, epoch):
+    device = next(model.parameters()).device
     criterion = criterion.to(device)
     
     train_loss = 0
@@ -29,8 +29,8 @@ def train_classifier(model, train_loader, test_loader, optimizer, criterion, epo
     return train_loss / len(train_loader), test_loss / len(test_loader)
 
 
-def eval_accuracy(model, dataset, device, batch_size=100):
-    model.to(device)
+def eval_accuracy(model, dataset, batch_size=100):
+    device = next(model.parameters()).device
     model.eval()
     
     dataloader = DataLoader(dataset=testset, batch_size=batch_size)
