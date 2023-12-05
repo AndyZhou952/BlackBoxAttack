@@ -32,7 +32,7 @@ def create_butterfly_dataset(path = './data/butterfly/'):
     transform = transforms.Compose([
                                     transforms.Resize((224,224)),
                                     transforms.ToTensor()])
-    
+      
     train_path = path + 'train'
     test_path = path + 'test'
     
