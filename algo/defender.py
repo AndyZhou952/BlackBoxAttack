@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
+import numpy as np
 
 # z: logits output from model
 # y: class label. If defender knows the true label, then use true label; otherwise, use prediction as label in loss
@@ -10,26 +11,27 @@ from torch import nn
 # beta: trade-off parameter for denfense & confidence preservation
 # kappa: number of iterations for optimziation
 # AAA_type: 'sin' or 'lin'. See paper
-def AAA(z, y, L, alpha, tau, kappa, T, beta, AAA_type='sin'):
+def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):    
     l_org = L(z, y).item()
-    l_atr = (torch.floor(l_org / tau) + 1/2) * tau
-    if AAA_type = 'sin': 
-        l_trg = l_org - alpha *  tau * torch.sin(torch.pi * ( 1 - 2 * (l_org - l_atr) / tau))
+    l_atr = (np.floor(l_org / tau) + 1/2) * tau
+    if AAA_type == 'sin': 
+        l_trg = l_org - alpha *  tau * np.sin(np.pi * ( 1 - 2 * (l_org - l_atr) / tau))
     else:
         l_trg = l_atr - alpha * (l_org - l_atr)
+    p_trg = torch.max(F.softmax(z / T, dim=1)).item()
+
     
-    l1 = nn.L1Loss()
-    p_trg = torch.max(F.softmax(z / T))
-    def optim_loss(u):
-        return l1(L(u, y), l_trg).item() + beta * l1(torch.max(F.softmax(u)), p_trg).item()
+    u = z.clone().detach()
+    u.requires_grad = True
+    u = u.to(z.device)
     
-    
-    u = z.clone()
-    optimizer = torch.optim.AdamW([u], lr=0.01)
-    for i in range(kappa):
-        optimizer.zero_grad()
-        loss = optim_loss(u)
-        loss.backward()
-        optimizer.step()
+    with torch.enable_grad():
+        optimizer = torch.optim.AdamW([u], lr=lr)
+
+        for i in range(kappa):
+            optimizer.zero_grad()
+            loss = torch.abs(L(u, y) - l_trg) + beta * torch.abs(torch.max(F.softmax(u, dim=1))- p_trg)
+            loss.backward()
+            optimizer.step()
     
     return u
