@@ -15,8 +15,8 @@ def NES(model, target_class, image, search_var, sample_num, g, u):
     with torch.no_grad():
         for i in range(n):
             u.normal_()
-            g = g + F.softmax(model(image + search_var * u_i), dim =1)[0,target_class] * u
-            g = g - F.softmax(model(image - search_var * u_i), dim =1)[0,target_class] * u #we assume the output of the model is ordered by class index
+            g = g + F.softmax(model(image + search_var * u), dim =1)[0,target_class] * u
+            g = g - F.softmax(model(image - search_var * u), dim =1)[0,target_class] * u #we assume the output of the model is ordered by class index
     return 1 / (2*n*search_var) * g
 
 def adversarial_generator(model, target_class, image, search_var, sample_num, bound, lr, query_limit):
@@ -26,10 +26,10 @@ def adversarial_generator(model, target_class, image, search_var, sample_num, bo
     adv_image = adv_image.to(device)
     N = image.size(2)
     g = torch.zeros(N, requires_grad=False).to(device)
-    u_i = torch.randn((N,N)).to(device)
+    u = torch.randn((N,N)).to(device)
     with torch.no_grad():
         for i in tqdm(range(query_limit // sample_num)):
-            gradient = NES(model, target_class, adv_image, search_var, sample_num, g, u_i)
+            gradient = NES(model, target_class, adv_image, search_var, sample_num, g, u)
             tmp = adv_image - lr * torch.sign(gradient)
             adv_image = torch.clamp(tmp, min=image-bound, max=image + bound)
             adv_image = torch.clamp(adv_image, 0, 1)
