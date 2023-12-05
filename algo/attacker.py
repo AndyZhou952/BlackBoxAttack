@@ -34,3 +34,7 @@ def adversarial_generator(model, target_class, image, search_var, sample_num, bo
             adv_image = torch.clamp(tmp, min=image-bound, max=image + bound)
             adv_image = torch.clamp(adv_image, 0, 1)
     return adv_image
+
+# PIA algo
+
+# Label-only attacker
