@@ -6,3 +6,4 @@ pandas==1.5.3
 torch==2.0.1
 torchvision==0.15.2
 tqdm @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_ac7zic_tin/croot/tqdm_1679561870178/work
+timm==0.9.12
