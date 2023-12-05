@@ -35,3 +35,33 @@ def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):
             optimizer.step()
     
     return u
+
+
+class AAAProtectedClassifier(nn.Module):
+    def __init__(self, model,  alpha, tau, kappa, T, beta, lr, AAA_type='sin'):
+        super().__init__()
+        self.model = model
+        self.alpha = alpha
+        self.tau = tau
+        self.kappa = kappa 
+        self.T = T
+        self.beta = beta
+        self.lr = lr
+        self.AAA_type = AAA_type
+        self.L = nn.CrossEntropyLoss()
+        
+    def forward(self, x):
+        x = x.to(device = next(self.model.parameters()).device)
+        org_logits = self.model(x)
+        pred_y = org_logits.argmax().view(1)
+        
+        protected_logits = AAA(z=org_logits, y=pred_y, L=self.L,
+                               alpha=self.alpha,
+                               tau=self.tau,
+                               kappa=self.kappa,
+                               T=self.T,
+                               beta=self.beta,
+                               lr=self.lr,
+                               AAA_type=self.AAA_type)
+        
+        return protected_logits
