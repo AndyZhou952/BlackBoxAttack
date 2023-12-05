@@ -33,7 +33,7 @@ def eval_accuracy(model, dataset, batch_size=100):
     device = next(model.parameters()).device
     model.eval()
     
-    dataloader = DataLoader(dataset=testset, batch_size=batch_size)
+    dataloader = DataLoader(dataset=dataset, batch_size=batch_size)
     
     count = 0
     with torch.no_grad():
