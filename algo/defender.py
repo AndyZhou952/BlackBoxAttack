@@ -12,17 +12,18 @@ import numpy as np
 # kappa: number of iterations for optimziation
 # AAA_type: 'sin' or 'lin'. See paper
 def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):    
+    # z: (batch_size, K)
+    # y: (batch_size, 1), integer encoding
     device = z.device
     z = z.detach()
     
-    l_org = L(z, y).item()
-    l_atr = (np.floor(l_org / tau) + 1/2) * tau
+    l_org = L(z, y)
+    l_atr = (torch.floor(l_org / tau) + 1/2) * tau
     if AAA_type == 'sin': 
-        l_trg = l_org - alpha *  tau * np.sin(np.pi * ( 1 - 2 * (l_org - l_atr) / tau))
+        l_trg = l_org - alpha *  tau * torch.sin(torch.pi * ( 1 - 2 * (l_org - l_atr) / tau))
     else:
         l_trg = l_atr - alpha * (l_org - l_atr)
-    p_trg = torch.max(F.softmax(z / T, dim=1)).item()
-
+    p_trg = torch.max(F.softmax(z / T, dim=1), dim=1).values
     
     u = z.clone().detach()
     u.requires_grad = True
@@ -34,6 +35,7 @@ def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):
         for i in range(kappa):
             optimizer.zero_grad()
             loss = torch.abs(L(u, y) - l_trg) + beta * torch.abs(torch.max(F.softmax(u, dim=1))- p_trg)
+            loss = loss.sum()
             loss.backward()
             optimizer.step()
     
@@ -51,14 +53,15 @@ class AAAProtectedClassifier(nn.Module):
         self.beta = beta
         self.lr = lr
         self.AAA_type = AAA_type
-        self.L = nn.CrossEntropyLoss()
+        self.L = nn.CrossEntropyLoss(reduce=False)
         
     def forward(self, x):
+        # x: image batch of dimension (batch_size, C, H, W)
         x = x.to(device = next(self.model.parameters()).device)
         self.model.eval()
         with torch.no_grad():
             org_logits = self.model(x)
-        pred_y = org_logits.argmax().view(1)
+        pred_y = org_logits.argmax(dim=1)
         
         protected_logits = AAA(z=org_logits, y=pred_y, L=self.L,
                                alpha=self.alpha,
