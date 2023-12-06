@@ -69,7 +69,7 @@ def adversarial_generator(model, target_class, image, search_var, sample_num, bo
     query_count = 0
 
     with torch.no_grad():
-        for _ in tqdm(range(query_limit // sample_num)):
+        for _ in range(query_limit // sample_num):
             gradient = NES(model, target_class, adv_image, search_var, sample_num)
             tmp = adv_image - lr * torch.sign(gradient)
             adv_image = torch.clamp(tmp, min=image-bound, max=image + bound)
@@ -83,6 +83,7 @@ def adversarial_generator(model, target_class, image, search_var, sample_num, bo
                 return query_count, adv_image 
 
     return 0, adv_image 
+
 
 def get_rank_of_target(model, image, target_class, k = 5):
     """
