@@ -94,7 +94,7 @@ def get_rank_of_target(model, image, target_class, k = 5):
     image = image.to(device)
     
     with torch.no_grad():
-        output = model(image)
+        output = model(image.unsqueeze(0))
         probabilities = F.softmax(output, dim = 1)
         top_probs, top_classes = torch.topk(probabilities, k)
         if target_class in top_classes[0]:
@@ -132,14 +132,15 @@ def PIA_adversarial_generator(model,initial_image, target_image, target_class, e
     u = torch.randn((N, N)).to(device)
     
     with torch.no_grad():
-        while epsilon > epsilon_adv or not get_rank_of_target(model, x_adv, target_class, k = 1):
+        while epsilon > epsilon_adv or not get_rank_of_target(model, x_adv, target_class, k=1):
             if query_count >= query_limit:
                 return False # indicating non_convergence
-            
+            if query_count %1000 == 0:
+                print(get_rank_of_target(model, x_adv, target_class, k))
             if label_only:
-                gradient = NES_label_only(model, target_clss, x_adv, search_var, sample_num, g, u, mu, k)
+                gradient = NES_label_only(model, target_class, x_adv, search_var, sample_num, g, u, mu, k)
             else:
-                gradient = NES(model, target_clss, x_adv, search_var, sample_num, g, u)
+                gradient = NES(model, target_class, x_adv, search_var, sample_num)
             eta = eta_max
             x_adv_hat = x_adv - eta * gradient
             
@@ -154,6 +155,6 @@ def PIA_adversarial_generator(model,initial_image, target_image, target_class, e
             
             x_adv = x_adv_hat
             epsilon -= delta
-            quert_count += 1
+            query_count += 1
             
     return x_adv
