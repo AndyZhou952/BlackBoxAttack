@@ -46,7 +46,7 @@ def NES_label_only_alter(model, image, target_class, search_var, sample_num, mu,
 def NES(model, target_class, image, search_var, sample_num):
     #NES estimation
     
-    C,H,W = image.size()
+    _, C,H,W = image.size()
     # u: (n, C, H, W)
     u = torch.randn((sample_num, C,H,W)).to(image.device)
     
@@ -55,34 +55,42 @@ def NES(model, target_class, image, search_var, sample_num):
     with torch.no_grad():
         # model output of dimension (2n, K)
         # prob of dimension (2n, 1)
-        prob = F.softmax(model(image.unsqueeze(0) + concat_u * search_var), dim =1)[:,target_class].view(-1, 1, 1, 1)
+        prob = F.softmax(model(image + concat_u * search_var), dim =1)[:,target_class].view(-1, 1, 1, 1)
         # g of dimension (C, H, W)
         # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
         g = torch.sum(prob * concat_u, dim=0) / (2 * sample_num * search_var)
     return g
 
+# image of dimension (batch_size, C, H, W)
 def adversarial_generator(model, target_class, image, search_var, sample_num, bound, lr, query_limit):
     device = next(model.parameters()).device
     image = image.to(device)
-    adv_image = image.clone()
-
-    query_count = 0
-
+    batch_size, C, H, W = image.size()
+    query_count = torch.zeros(batch_size).to(device)
+    
+    adv_images = list()
     with torch.no_grad():
-        for _ in range(query_limit // sample_num):
-            gradient = NES(model, target_class, adv_image, search_var, sample_num)
-            tmp = adv_image - lr * torch.sign(gradient)
-            adv_image = torch.clamp(tmp, min=image-bound, max=image + bound)
-            adv_image = torch.clamp(adv_image, 0, 1)
+        for i in range(batch_size):
+            
+            query = 0
+            cur_img = image[i, :, :, :].unsqueeze(0)
+            cur_target_class = target_class[i]
+            adv_img = cur_img.clone()
+            for _ in range(query_limit // (2 * sample_num)):
+                g = NES(model, cur_target_class, adv_img, search_var, sample_num)
+                adv_img = adv_img - lr * torch.sign(g)
+                adv_img = torch.clamp(adv_img, min=cur_img-bound, max=cur_img + bound)
+                adv_img = torch.clamp(adv_img, 0, 1)
 
-            query_count += 2 * sample_num
-            adv_logits = model(adv_image.unsqueeze(0))
-            adv_class = torch.argmax(adv_logits, dim=1)
+                query += 2 * sample_num
+                adv_logits = model(adv_img)
+                adv_class = torch.argmax(adv_logits, dim=1)
 
-            if adv_class != target_class:
-                return query_count, adv_image 
-
-    return 0, adv_image 
+                if adv_class != cur_target_class:
+                    break
+            query_count[i] = query
+            adv_images.append(adv_img)
+    return torch.concat(adv_images, dim=0), query_count
 
 
 def get_rank_of_target(model, image, target_class, k = 5):
