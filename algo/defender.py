@@ -16,6 +16,7 @@ def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):
     # y: (batch_size, 1), integer encoding
     device = z.device
     z = z.detach()
+    y = y.detach()
     
     l_org = L(z, y)
     l_atr = (torch.floor(l_org / tau) + 1/2) * tau
@@ -38,7 +39,6 @@ def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):
             loss = loss.sum()
             loss.backward()
             optimizer.step()
-    
     return u
 
 
@@ -61,7 +61,7 @@ class AAAProtectedClassifier(nn.Module):
         self.model.eval()
         with torch.no_grad():
             org_logits = self.model(x)
-        pred_y = org_logits.argmax(dim=1)
+            pred_y = org_logits.argmax(dim=1)
         
         protected_logits = AAA(z=org_logits, y=pred_y, L=self.L,
                                alpha=self.alpha,
