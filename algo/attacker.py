@@ -3,33 +3,53 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+def NES_label_only(model, target_class, image, search_var, sample_num, g, u, mu, k):
+    n = sample_num
+    N = image.size(2)
 
-#Query limited attack using NES
-def NES(model, target_class, image, search_var, sample_num, g, u):
-    #parameters
-    n = sample_num #should be even
-    N = image.size(2) #assume the image is N x N may subject to change
-    
-    #NES estimation
     g.zero_()
     with torch.no_grad():
         for _ in range(n):
             u.normal_()
-            g = g + F.softmax(model(image + search_var * u), dim =1)[0,target_class] * u
-            g = g - F.softmax(model(image - search_var * u), dim =1)[0,target_class] * u #we assume the output of the model is ordered by class index
-    return 1 / (2*n*search_var) * g
+
+            S_x_pos = S_x(model, image + search_var * u, target_class, mu, n, k)
+            S_x_neg = S_x(model, image - search_var * u, target_class, mu, n, k)
+
+            g += (S_x_pos - S_x_neg) * u
+
+    return g / (2 * n * search_var)
+
+
+#Query limited attack using NES
+def NES(model, target_class, image, search_var, sample_num):
+    #NES estimation
+    
+    C,H,W = image.size()
+    # u: (n, C, H, W)
+    u = torch.randn((sample_num, C,H,W)).to(image.device)
+    
+    # cocnat_u: [2n, C, H, W]
+    concat_u =  torch.cat([u , -u], dim=0)
+    with torch.no_grad():
+        # model output of dimension (2n, K)
+        # prob of dimension (2n, 1)
+        tmp = image.unsqueeze(0) + concat_u * search_var
+        prob = F.softmax(model(image.unsqueeze(0) + concat_u * search_var), dim =1)[:,target_class].view(-1, 1, 1, 1)
+        # g of dimension (C, H, W)
+        # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
+        g = torch.sum(prob * concat_u, dim=0) / (2 * sample_num * search_var)
+    return g
 
 def adversarial_generator(model, target_class, image, search_var, sample_num, bound, lr, query_limit):
     device = next(model.parameters()).device
+    # image: (C, H, W)
     image = image.to(device)
     adv_image = image.clone()
-    adv_image = adv_image.to(device)
-    N = image.size(2)
-    g = torch.zeros(N, requires_grad=False).to(device)
-    u = torch.randn((N,N)).to(device)
+    # adv_image = adv_image.to(device)
+
     with torch.no_grad():
         for i in tqdm(range(query_limit // sample_num)):
-            gradient = NES(model, target_class, adv_image, search_var, sample_num, g, u)
+            gradient = NES(model, target_class, adv_image, search_var, sample_num)
             tmp = adv_image - lr * torch.sign(gradient)
             adv_image = torch.clamp(tmp, min=image-bound, max=image + bound)
             adv_image = torch.clamp(adv_image, 0, 1)
@@ -67,21 +87,6 @@ def S_x(model, image, target_class, mu, n, k):
     
     return R_sum / n    
 
-def NES_label_only(model, target_class, image, search_var, sample_num, g, u, mu, k):
-    n = sample_num
-    N = image.size(2)
-
-    g.zero_()
-    with torch.no_grad():
-        for _ in range(n):
-            u.normal_()
-
-            S_x_pos = S_x(model, image + search_var * u, target_class, mu, n, k)
-            S_x_neg = S_x(model, image - search_var * u, target_class, mu, n, k)
-
-            g += (S_x_pos - S_x_neg) * u
-
-    return g / (2 * n * search_var)
 
 def PIA_adversarial_generator(model,initial_image, target_image, target_class, epsilon, 
                               delta, search_var, sample_num, eta_max, eta_min, epsilon_adv, k, query_limit = 100000, 
