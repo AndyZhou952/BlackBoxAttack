@@ -45,13 +45,13 @@ def get_rank_of_target(model, image, target_class, k = 5):
     
     with torch.no_grad():
         output = model(image)
-    probabilities = F.softmax(output, dim = 1)
-    top_probs, top_classes = torch.topk(probabilities, k)
-    if target_class in top_classes[0]:
-        target_rank = (top_classes[0] == target_class).nonzero(as_tuple = True)[0].item() + 1
-        return target_rank
-    else:
-        return 0
+        probabilities = F.softmax(output, dim = 1)
+        top_probs, top_classes = torch.topk(probabilities, k)
+        if target_class in top_classes[0]:
+            target_rank = (top_classes[0] == target_class).nonzero(as_tuple = True)[0].item() + 1
+            return target_rank
+        else:
+            return 0
 
 def S_x(model, image, target_class, mu, n, k):
     device = image.device
