@@ -20,6 +20,28 @@ def NES_label_only(model, target_class, image, search_var, sample_num, g, u, mu,
     return g / (2 * n * search_var)
 
 
+def NES_label_only_alter(model, image, target_class, search_var, sample_num, mu, k):
+    C, H, W = image.size()
+    device = image.device
+
+    # u: (n, C, H, W)
+    u = torch.randn((sample_num, C, H, W), device=device)
+
+    # concat_u: [2n, C, H, W]
+    concat_u = torch.cat([u, -u], dim=0)
+
+    with torch.no_grad():
+        perturbed_images = image.unsqueeze(0) + concat_u * search_var
+        S_x_values = torch.zeros(2 * sample_num, device=device)
+
+        for i, perturbed_image in enumerate(perturbed_images):
+            S_x_values[i] = S_x(model, perturbed_image, target_class, mu, sample_num, k)
+
+        # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
+        g = torch.sum(S_x_values.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * sample_num * search_var)
+
+    return g
+
 #Query limited attack using NES
 def NES(model, target_class, image, search_var, sample_num):
     #NES estimation
@@ -33,7 +55,6 @@ def NES(model, target_class, image, search_var, sample_num):
     with torch.no_grad():
         # model output of dimension (2n, K)
         # prob of dimension (2n, 1)
-        tmp = image.unsqueeze(0) + concat_u * search_var
         prob = F.softmax(model(image.unsqueeze(0) + concat_u * search_var), dim =1)[:,target_class].view(-1, 1, 1, 1)
         # g of dimension (C, H, W)
         # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
