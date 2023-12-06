@@ -63,18 +63,26 @@ def NES(model, target_class, image, search_var, sample_num):
 
 def adversarial_generator(model, target_class, image, search_var, sample_num, bound, lr, query_limit):
     device = next(model.parameters()).device
-    # image: (C, H, W)
     image = image.to(device)
     adv_image = image.clone()
-    # adv_image = adv_image.to(device)
+
+    query_count = 0
 
     with torch.no_grad():
-        for i in tqdm(range(query_limit // sample_num)):
+        for _ in tqdm(range(query_limit // sample_num)):
             gradient = NES(model, target_class, adv_image, search_var, sample_num)
             tmp = adv_image - lr * torch.sign(gradient)
             adv_image = torch.clamp(tmp, min=image-bound, max=image + bound)
             adv_image = torch.clamp(adv_image, 0, 1)
-    return adv_image
+
+            query_count += 2 * sample_num
+            adv_logits = model(adv_image.unsqueeze(0))
+            adv_class = torch.argmax(adv_logits, dim=1)
+
+            if adv_class != target_class:
+                return query_count, adv_image 
+
+    return 0, adv_image 
 
 def get_rank_of_target(model, image, target_class, k = 5):
     """
