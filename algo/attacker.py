@@ -60,7 +60,6 @@ def S_x(model, image, target_class, mu, n, k):
     for _ in range(n):
         delta = (torch.rand_like(image) * 2 - 1) * mu
         perturbed_image = image + delta
-        perturbed_image = torch.clamp(perturbed_image, 0, 1)
         
         if is_target_in_top_k(model, perturbed_image, target_class, k): # else R = 0, nothing added
             R = k - get_rank_of_target(model, perturbed_image, target_class, k)
