@@ -45,6 +45,7 @@ def NES_label_only_alter(model, image, target_class, search_var, sample_num, mu,
 #Query limited attack using NES
 def NES(model, target_class, image, search_var, sample_num):
     #NES estimation
+    model.eval()
     
     _, C,H,W = image.size()
     # u: (n, C, H, W)
@@ -63,6 +64,8 @@ def NES(model, target_class, image, search_var, sample_num):
 
 # image of dimension (batch_size, C, H, W)
 def adversarial_generator(model, target_class, image, search_var, sample_num, bound, lr, query_limit):
+    model.eval()
+    
     device = next(model.parameters()).device
     image = image.to(device)
     batch_size, C, H, W = image.size()
