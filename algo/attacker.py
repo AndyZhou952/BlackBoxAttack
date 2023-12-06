@@ -13,7 +13,7 @@ def NES(model, target_class, image, search_var, sample_num, g, u):
     #NES estimation
     g.zero_()
     with torch.no_grad():
-        for i in range(n):
+        for _ in range(n):
             u.normal_()
             g = g + F.softmax(model(image + search_var * u), dim =1)[0,target_class] * u
             g = g - F.softmax(model(image - search_var * u), dim =1)[0,target_class] * u #we assume the output of the model is ordered by class index
