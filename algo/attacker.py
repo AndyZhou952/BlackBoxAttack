@@ -35,37 +35,91 @@ def adversarial_generator(model, target_class, image, search_var, sample_num, bo
             adv_image = torch.clamp(adv_image, 0, 1)
     return adv_image
 
-# PIA algo
-def PIA_adversarial_generator(model, initial_image, image, target_class, epsilon_adv, epsilon_0, search_var, sample_num, delta_epsilon, eta_max, eta_min, k=5):
+def get_rank_of_target(model, image, target_class, k = 5):
+    """
+    return the rank of the target in the top-k predictions
+    return 0 if the target class is not in the top-k
+    """
     device = next(model.parameters()).device
-    initial_image, image = initial_image.to(device), image.to(device)
-    x_adv = image.clone().to(device)
-    N = initial_image.size(2)
-    g = torch.zeros(N, requires_grad=False).to(device)
-    u = torch.randn((N, N)).to(device)
-    
-    epsilon = epsilon_0
-    x_adv = torch.clamp(x_adv, initial_image - epsilon, initial_image + epsilon)
-    original_class = torch.argmax(model(initial_image), dim=1)
+    image = image.to(device)
     
     with torch.no_grad():
-        probabilities_adv = F.softmax(model(x_adv), dim=1)
-        top_probs, top_classes = torch.topk(probabilities, k)
-        while (epsilon > epsilon_adv) | (original_class != target_class):
-            gradient = NES(model, target_class, x_adv, search_var, sample_num, g, u)
+        output = model(image)
+    probabilities = F.softmax(output, dim = 1)
+    top_probs, top_classes = torch.topk(probabilities, k)
+    if target_class in top_classes[0]:
+        target_rank = (top_classes[0] == target_class).nonzero(as_tuple = True)[0].item() + 1
+        return target_rank
+    else:
+        return 0
+
+def S_x(model, image, target_class, mu, n, k):
+    device = image.device
+    R_sum = 0.0
+    
+    for _ in range(n):
+        delta = (torch.rand_like(image) * 2 - 1) * mu
+        perturbed_image = image + delta
+        perturbed_image = torch.clamp(perturbed_image, 0, 1)
+        
+        if is_target_in_top_k(model, perturbed_image, target_class, k): # else R = 0, nothing added
+            R = k - get_rank_of_target(model, perturbed_image, target_class, k)
+            R_sum += R
+    
+    return R_sum / n    
+
+def NES_label_only(model, target_class, image, search_var, sample_num, g, u, mu, k):
+    n = sample_num
+    N = image.size(2)
+
+    g.zero_()
+    with torch.no_grad():
+        for _ in range(n):
+            u.normal_()
+
+            S_x_pos = S_x(model, image + search_var * u, target_class, mu, n, k)
+            S_x_neg = S_x(model, image - search_var * u, target_class, mu, n, k)
+
+            g += (S_x_pos - S_x_neg) * u
+
+    return g / (2 * n * search_var)
+
+def PIA_adversarial_generator(model,initial_image, target_image, target_class, epsilon, 
+                              delta, search_var, sample_num, eta_max, eta_min, epsilon_adv, k, query_limit = 100000, 
+                              label_only = False, mu = None):
+    query_count = 0
+    
+    device = next(model.parameters()).device
+    x = initial_image.to(device)
+    x_adv = target_image.clone().to(device)
+    x_adv = torch.clamp(x_adv, x - epsilon, x + epsilon)
+    N = initial_image.size(2)
+    g = torch.zeros(N, requires_grad = False).to(device)
+    u = torch.randn((N, N)).to(device)
+    
+    with torch.no_grad():
+        while epsilon > epsilon_adv or not get_rank_of_target(model, x_adv, target_class, k = 1):
+            if query_count >= query_limit:
+                return False # indicating non_convergence
+            
+            if label_only:
+                gradient = NES_label_only(model, target_clss, x_adv, search_var, sample_num, g, u, mu, k)
+            else:
+                gradient = NES(model, target_clss, x_adv, search_var, sample_num, g, u)
             eta = eta_max
             x_adv_hat = x_adv - eta * gradient
             
-            while not target_class in top_classes[0]:
+            while not get_rank_of_target(model, x_adv_hat, target_class, k):
                 if eta < eta_min:
-                    epsilon += delta_epsilon
-                    delta_epsilon /= 2
+                    epsilon += delta
+                    delta /= 2
                     x_adv_hat = x_adv
-                    break  
+                    break
                 eta /= 2
-                x_adv_hat = torch.clamp(x_adv_hat, initial_image - epsilon, initial_image + epsilon)
+                x_adv_hat = torch.clamp(x_adv - eta * gradient, x - epsilon, x + epsilon)
+            
             x_adv = x_adv_hat
-            epsilon = epsilon - delta_epsilon
+            epsilon -= delta
+            quert_count += 1
+            
     return x_adv
-
-# Label-only attacker
