@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-def NES_label_only(model, target_class, image, search_var, sample_num, g, u, mu, k):
+def NES_label_only_old(model, target_class, image, search_var, sample_num, g, u, mu, k):
     n = sample_num
     N = image.size(2)
 
@@ -20,25 +20,25 @@ def NES_label_only(model, target_class, image, search_var, sample_num, g, u, mu,
     return g / (2 * n * search_var)
 
 
-def NES_label_only_alter(model, image, target_class, search_var, sample_num, mu, k):
-    C, H, W = image.size()
+def NES_label_only(model, image, target_class, search_var, m, mu, k):
+    _, C, H, W = image.size()
     device = image.device
 
     # u: (n, C, H, W)
-    u = torch.randn((sample_num, C, H, W), device=device)
+    u = torch.randn((m, C, H, W), device=device)
 
     # concat_u: [2n, C, H, W]
     concat_u = torch.cat([u, -u], dim=0)
 
     with torch.no_grad():
         perturbed_images = image.unsqueeze(0) + concat_u * search_var
-        S_x_values = torch.zeros(2 * sample_num, device=device)
+        S_x_values = torch.zeros(2 * m, device=device)
 
         for i, perturbed_image in enumerate(perturbed_images):
-            S_x_values[i] = S_x(model, perturbed_image, target_class, mu, sample_num, k)
+            S_x_values[i] = S_x(model, perturbed_image, target_class, mu, m, k)
 
         # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
-        g = torch.sum(S_x_values.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * sample_num * search_var)
+        g = torch.sum(S_x_values.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * m * search_var)
 
     return g
 
@@ -100,12 +100,14 @@ def get_rank_of_target(model, image, target_class, k = 5):
     """
     return the rank of the target in the top-k predictions
     return 0 if the target class is not in the top-k
+    
+    Expects 4D input
     """
     device = next(model.parameters()).device
     image = image.to(device)
     
     with torch.no_grad():
-        output = model(image.unsqueeze(0))
+        output = model(image)
         probabilities = F.softmax(output, dim = 1)
         top_probs, top_classes = torch.topk(probabilities, k)
         if target_class in top_classes[0]:
@@ -114,31 +116,34 @@ def get_rank_of_target(model, image, target_class, k = 5):
         else:
             return 0
 
-def S_x(model, image, target_class, mu, n, k):
+def S_x(model, image, target_class, mu, m, k):
     device = image.device
     R_sum = 0.0
     
-    for _ in range(n):
+    for _ in range(m):
         delta = (torch.rand_like(image) * 2 - 1) * mu
         perturbed_image = image + delta
         
-        if is_target_in_top_k(model, perturbed_image, target_class, k): # else R = 0, nothing added
-            R = k - get_rank_of_target(model, perturbed_image, target_class, k)
-            R_sum += R
+        rank = get_rank_of_target(model, perturbed_image, target_class, k)
+        R_sum += k - rank if rank != 0 else 0
     
-    return R_sum / n    
+    return R_sum / m  
 
 def PIA_adversarial_generator(model, initial_images, reverse_mapping, adv_image_set, epsilon, 
-                              delta, search_var, sample_num, eta_max, eta_min, epsilon_adv, k, 
-                              query_limit=100000, label_only=False, mu=None):
+                              delta, search_var, sample_num, eta_max, eta_min, bound, k, 
+                              query_limit=30000, label_only=False, mu=None, m=None):
+    """
+    mu: label-only parameter
+    """
     model.eval()
     
     device = next(model.parameters()).device
-    initial_images = initial_images.unsqueeze(0).to(device)
+    initial_images = initial_images.to(device)
     target_images = list()
     target_classes = list()
     for initial_image in initial_images:
-        target_class = torch.topk(F.softmax(model(initial_image), dim = 1), k=5)[1][0][1].cpu().item()
+        # get the class with the second highest probability as the target class
+        target_class = torch.topk(F.softmax(model(initial_image.unsqueeze(0)), dim = 1), k=5)[1][0][1].cpu().item()
         reversed_label = reverse_mapping[target_class]
         target_image = adv_image_set[reversed_label].to(device)
         target_images.append(target_image)
@@ -150,17 +155,18 @@ def PIA_adversarial_generator(model, initial_images, reverse_mapping, adv_image_
 
     with torch.no_grad():
         for i in range(batch_size):
-            x = initial_images[i]
+            x = initial_images[i].unsqueeze(0)
             x_adv = target_images[i].unsqueeze(0)
             x_adv = torch.clamp(x_adv, x - epsilon, x + epsilon)
 
             query_count = 0
-            while epsilon > epsilon_adv or not get_rank_of_target(model, x_adv, target_classes[i], k=1):
+            # stopping criteria: target epsilon within the original image & the classification is the target class
+            while epsilon > bound or not get_rank_of_target(model, x_adv, target_classes[i], k=1):
                 if query_count >= query_limit:
                     break  # Non-convergence for this image
 
                 if label_only:
-                    gradient = NES_label_only(model, x_adv, target_classes[i], search_var, sample_num, mu, k)
+                    gradient = NES_label_only(model, x_adv, target_classes[i], search_var, m, mu, k)
                 else:
                     gradient = NES(model, target_classes[i], x_adv, search_var, sample_num)
 
@@ -180,6 +186,6 @@ def PIA_adversarial_generator(model, initial_images, reverse_mapping, adv_image_
                 query_count += 2 * sample_num
 
             query_counts[i] = query_count
-            adv_images.append(x_adv.squeeze(0))
+            adv_images.append(x_adv)
 
-    return torch.stack(adv_images), query_counts
+    return torch.concat(adv_images, dim = 0), query_counts
