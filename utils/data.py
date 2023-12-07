@@ -42,6 +42,7 @@ def create_butterfly_dataset(path = './data/butterfly/'):
     reverse_mapping=dict(zip(N,class_names))
 
     paths0=[]
+    image_dict = {}
     for dirname, _, filenames in os.walk(train_path):
         for filename in filenames:
             if filename[-4:]=='.jpg':
@@ -50,6 +51,10 @@ def create_butterfly_dataset(path = './data/butterfly/'):
                 if label == '.ipynb_checkpoints':
                     continue
                 paths0+=[(path,normal_mapping[label])]
+                if label not in image_dict:
+                    image = Image.open(path).convert('RGB')
+                    image_tensor = transform(image)
+                    image_dict[label] = image_tensor
             
     tpaths0=[]
     for dirname, _, filenames in os.walk(test_path):
@@ -68,4 +73,4 @@ def create_butterfly_dataset(path = './data/butterfly/'):
     trainset = ImageDataset(paths0, transform)
     testset = ImageDataset(tpaths0, transform)
     
-    return trainset, testset, normal_mapping, reverse_mapping
+    return trainset, testset, normal_mapping, reverse_mapping, image_dict
