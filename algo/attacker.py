@@ -3,23 +3,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-def NES_label_only_old(model, target_class, image, search_var, sample_num, g, u, mu, k):
-    n = sample_num
-    N = image.size(2)
-
-    g.zero_()
-    with torch.no_grad():
-        for _ in range(n):
-            u.normal_()
-
-            S_x_pos = S_x(model, image + search_var * u, target_class, mu, n, k)
-            S_x_neg = S_x(model, image - search_var * u, target_class, mu, n, k)
-
-            g += (S_x_pos - S_x_neg) * u
-
-    return g / (2 * n * search_var)
-
-
 def NES_label_only(model, image, target_class, search_var, m, mu, k):
     _, C, H, W = image.size()
     device = image.device
