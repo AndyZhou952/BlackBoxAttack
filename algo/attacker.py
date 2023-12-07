@@ -3,6 +3,31 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+def NES_partial_info(model, target_class, image, search_var, sample_num, k):
+    model.eval()
+    _, C, H, W = image.size()
+    device = image.device
+    # u: (n, C, H, W)
+    u = torch.randn((sample_num, C,H,W)).to(image.device)
+    
+    # cocnat_u: [2n, C, H, W]
+    concat_u =  torch.cat([u , -u], dim=0)
+    perturbed_images = image + concat_u * search_var
+    perturbed_images = perturbed_images.view(-1, C, H, W)
+
+    gradients = torch.zeros_like(image)
+    with torch.no_grad():
+        outputs = model(perturbed_images)
+        top_probs, top_classes = torch.topk(F.softmax(outputs, dim=1), k)
+
+        # subset for the parts where the target class is in the top k classes
+        target_in_top_k = top_classes == target_class
+        # TODO: when not exist then 0?
+
+        g = torch.sum(target_probs.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * sample_num * search_var)
+
+    return g
+
 def NES_label_only(model, image, target_class, search_var, m, mu, k):
     _, C, H, W = image.size()
     device = image.device
@@ -151,7 +176,8 @@ def PIA_adversarial_generator(model, initial_images, reverse_mapping, adv_image_
                 if label_only:
                     gradient = NES_label_only(model, x_adv, target_classes[i], search_var, m, mu, k)
                 else:
-                    gradient = NES(model, target_classes[i], x_adv, search_var, sample_num)
+                    gradient = NES_partial_info(model, target_classes[i], x_adv, search_var, sample_num, k)
+                    # NES(model, target_classes[i], x_adv, search_var, sample_num) # the old version
 
                 eta = eta_max
                 x_adv_hat = x_adv - eta * gradient
