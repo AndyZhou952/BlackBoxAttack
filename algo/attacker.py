@@ -128,44 +128,58 @@ def S_x(model, image, target_class, mu, n, k):
     
     return R_sum / n    
 
-
-def PIA_adversarial_generator(model,initial_image, target_image, target_class, epsilon, 
-                              delta, search_var, sample_num, eta_max, eta_min, epsilon_adv, k, query_limit = 100000, 
-                              label_only = False, mu = None):
-    query_count = 0
+def PIA_adversarial_generator(model, initial_images, reverse_mapping, adv_image_set, epsilon, 
+                              delta, search_var, sample_num, eta_max, eta_min, epsilon_adv, k, 
+                              query_limit=100000, label_only=False, mu=None):
+    model.eval()
     
     device = next(model.parameters()).device
-    x = initial_image.to(device)
-    x_adv = target_image.clone().to(device)
-    x_adv = torch.clamp(x_adv, x - epsilon, x + epsilon)
-    N = initial_image.size(2)
-    g = torch.zeros(N, requires_grad = False).to(device)
-    u = torch.randn((N, N)).to(device)
+    initial_images = initial_images.unsqueeze(0).to(device)
+    target_images = list()
+    target_classes = list()
+    for initial_image in initial_images:
+        target_class = torch.topk(F.softmax(model(initial_image), dim = 1), k=5)[1][0][1].cpu().item()
+        reversed_label = reverse_mapping[target_class]
+        target_image = adv_image_set[reversed_label].to(device)
+        target_images.append(target_image)
+        target_classes.append(target_class)
     
+    batch_size = initial_images.size(0)
+    query_counts = torch.zeros(batch_size).to(device)
+    adv_images = []
+
     with torch.no_grad():
-        while epsilon > epsilon_adv or not get_rank_of_target(model, x_adv, target_class, k=1):
-            if query_count >= query_limit:
-                return False # indicating non_convergence
-            if query_count %1000 == 0:
-                print(get_rank_of_target(model, x_adv, target_class, k))
-            if label_only:
-                gradient = NES_label_only(model, target_class, x_adv, search_var, sample_num, g, u, mu, k)
-            else:
-                gradient = NES(model, target_class, x_adv, search_var, sample_num)
-            eta = eta_max
-            x_adv_hat = x_adv - eta * gradient
-            
-            while not get_rank_of_target(model, x_adv_hat, target_class, k):
-                if eta < eta_min:
-                    epsilon += delta
-                    delta /= 2
-                    x_adv_hat = x_adv
-                    break
-                eta /= 2
-                x_adv_hat = torch.clamp(x_adv - eta * gradient, x - epsilon, x + epsilon)
-            
-            x_adv = x_adv_hat
-            epsilon -= delta
-            query_count += 1
-            
-    return x_adv
+        for i in range(batch_size):
+            x = initial_images[i]
+            x_adv = target_images[i].unsqueeze(0)
+            x_adv = torch.clamp(x_adv, x - epsilon, x + epsilon)
+
+            query_count = 0
+            while epsilon > epsilon_adv or not get_rank_of_target(model, x_adv, target_classes[i], k=1):
+                if query_count >= query_limit:
+                    break  # Non-convergence for this image
+
+                if label_only:
+                    gradient = NES_label_only(model, x_adv, target_classes[i], search_var, sample_num, mu, k)
+                else:
+                    gradient = NES(model, target_classes[i], x_adv, search_var, sample_num)
+
+                eta = eta_max
+                x_adv_hat = x_adv - eta * gradient
+                while not get_rank_of_target(model, x_adv_hat, target_classes[i], k):
+                    if eta < eta_min:
+                        epsilon += delta
+                        delta /= 2
+                        x_adv_hat = x_adv
+                        break
+                    eta /= 2
+                    x_adv_hat = torch.clamp(x_adv - eta * gradient, x - epsilon, x + epsilon)
+                
+                x_adv = x_adv_hat
+                epsilon -= delta
+                query_count += 2 * sample_num
+
+            query_counts[i] = query_count
+            adv_images.append(x_adv.squeeze(0))
+
+    return torch.stack(adv_images), query_counts
