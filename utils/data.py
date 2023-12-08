@@ -79,6 +79,10 @@ def create_butterfly_dataset(path = './data/butterfly/', img_reshape=(3, 224, 22
     
     return trainset, testset, normal_mapping, reverse_mapping, sample_img_dataset
 
+# Create dataset from raw structure obtained from Kaggle
+# (1): Download dataset fron Kaggle: https://www.kaggle.com/datasets/akash2sharma/tiny-imagenet
+# (2): Unzip the downloaded dataset to './data/tiny_imagenet'
+# (3): Run the function
 def create_imagenet_dataset(path='./data/tiny_imagenet/tiny-imagenet-200/', img_reshape=(3, 224, 224), split_ratio = 0.8, num_classes = 10):
     C, H, W = img_reshape
     transform = transforms.Compose([
