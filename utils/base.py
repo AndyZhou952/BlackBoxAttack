@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 import time
 import copy
+import torch.nn.functional as F
 
 def train_classifier(model, train_loader, test_loader, optimizer, criterion, epoch):
     device = next(model.parameters()).device
@@ -19,7 +20,6 @@ def train_classifier(model, train_loader, test_loader, optimizer, criterion, epo
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
-    
     
     model.eval()
     with torch.no_grad():
@@ -147,3 +147,10 @@ def get_correct_predictions_subset(model, dataset, batch_size=100):
     correct_subset = Subset(dataset, correct_indices)
 
     return accuracy, correct_subset
+
+
+
+def quick_predict(model, img):
+    model.eval()
+    device = next(model.parameters()).device
+    return torch.argmax(F.softmax(model(img.to(device)), dim=1), dim=1)
