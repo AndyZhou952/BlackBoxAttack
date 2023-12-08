@@ -124,7 +124,8 @@ def create_imagenet_dataset(path='./data/tiny_imagenet/tiny-imagenet-200/', img_
     total_size = len(data)
     train_size = int(split_ratio * total_size)
     test_size = total_size - train_size
-
-    trainset, testset = random_split(data, [train_size, test_size])
+    
+    torch.manual_seed(42)
+    trainset, testset = random_split(data, [train_size, test_size], generator=torch.Generator().manual_seed(42))
 
     return trainset, testset, normal_mapping, reverse_mapping, sample_img_dataset
