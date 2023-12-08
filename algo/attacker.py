@@ -13,24 +13,22 @@ from torch import nn
 #     # u: (n, C, H, W)
 #     u = torch.randn((sample_num, C, H, W), device=device)
 
-#     # concat_u: [2n, C, H, W]
-#     concat_u = torch.cat([u, -u], dim=0)
-
 #     with torch.no_grad():
-#         # (2n, C, H, W) = (1, C, H, W) + (2n, C, H, W)
-#         perturbed_images = image + concat_u * search_var
+#         # (n, C, H, W) = (1, C, H, W) + (n, C, H, W)
+#         perturbed_images = image + u * search_var
+
+#         # target_class: (0) scaler tensor
+#         # proxy_prob: (n, )
+#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
         
-#         # (2n, )
-#         proxy_prob = torch.zeros(2 * sample_num, device=device)
+#         # prob * concat_u: (n,1, 1, 1) * (n, C, H, W) = (n, C, H, W)
+#         g_pos = torch.sum(proxy_prob.view(-1, 1, 1, 1) * u, dim=0) / (sample_num * search_var)
 
-#         for i, perturbed_image in enumerate(perturbed_images):
-#             # target_class: (0) scaler tensor
-#             proxy_prob[i] = S_x(model, perturbed_image.unsqueeze(0), target_class, mu, m, k)
-
-#         # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
-#         g = torch.sum(proxy_prob.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * sample_num * search_var)
-
-#     return g
+#         perturbed_images = image - u * search_var
+#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
+#         g_neg = torch.sum(-proxy_prob.view(-1, 1, 1, 1) * u, dim=0) / (sample_num * search_var)
+        
+#     return g_pos/2 + g_neg /2
 
 def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
     model.eval()
@@ -48,17 +46,46 @@ def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
     with torch.no_grad():
         # (2n, C, H, W) = (1, C, H, W) + (2n, C, H, W)
         perturbed_images = image + concat_u * search_var
+        
+        # (2n, )
+        proxy_prob = torch.zeros(2 * sample_num, device=device)
 
-        # target_class: (0) scaler tensor
-        # proxy_prob: (2n, )
-        proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
-        
-        print(proxy_prob.shape)
-        
+        for i, perturbed_image in enumerate(perturbed_images):
+            # target_class: (0) scaler tensor
+            proxy_prob[i] = S_x(model, perturbed_image.unsqueeze(0), target_class, mu, m, k)
+
         # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
         g = torch.sum(proxy_prob.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * sample_num * search_var)
 
     return g
+
+# def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
+#     model.eval()
+    
+#     # image: (1, C, H, W)
+#     _, C, H, W = image.size()
+#     device = image.device
+
+#     # u: (n, C, H, W)
+#     u = torch.randn((sample_num, C, H, W), device=device)
+
+#     # concat_u: [2n, C, H, W]
+#     concat_u = torch.cat([u, -u], dim=0)
+
+#     with torch.no_grad():
+#         # (2n, C, H, W) = (1, C, H, W) + (2n, C, H, W)
+#         perturbed_images = image + concat_u * search_var
+
+#         # target_class: (0) scaler tensor
+#         # proxy_prob: (2n, )
+#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
+        
+#         print(proxy_prob.shape)
+        
+#         # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
+#         g = torch.sum(proxy_prob.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * sample_num * search_var)
+
+#     return g
 
 
 def NES(model, target_class, image, search_var, sample_num):
@@ -249,7 +276,6 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
 
     with torch.no_grad():
         for i in range(batch_size):
-            print(i)
             x = images[i, :, :, :].unsqueeze(0)
             # y_adv: (0) scaler tensor
             y_adv = target_classes[i]
@@ -283,17 +309,17 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
                     
                 x_adv = x_adv_hat
                 epsilon -= delta
-                query_count += 2 * sample_num
                 
-                print(get_rank_of_target(model, x_adv, target_classes[i], k=1)!= 1)
-                print(get_rank_of_target(model, x_adv, target_classes[i], k=5))
+                if label_only:
+                    query_count += 2 * sample_num * m
+                else:
+                    query_count += 2 * sample_num
+                
                 
             query_counts[i] = query_count
             adv_images.append(x_adv)
 
     return torch.concat(adv_images, dim = 0), query_counts
-
-
 
 
 # def NES_partial_info(model, target_class, image, search_var, sample_num, k):
