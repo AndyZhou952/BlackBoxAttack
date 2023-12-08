@@ -45,25 +45,27 @@ def create_butterfly_dataset(path = './data/butterfly/', img_reshape=(3, 224, 22
     paths0=[]
     # store an image for each class for adversarial attack
     sample_img_dataset = torch.zeros((len(class_names), C, H, W))
+    seen = list()
     for dirname, _, filenames in os.walk(train_path):
         for filename in filenames:
             if filename[-4:]=='.jpg':
                 path=os.path.join(dirname, filename)
-                label=dirname.split('\\')[-1]
+                label=dirname.split('/')[-1]
                 if label == '.ipynb_checkpoints':
                     continue
                 paths0+=[(path,normal_mapping[label])]
-                if label not in sample_img_dataset:
-                    image = Image.open(path).convert('RGB')
-                    image = transform(image)
-                    sample_img_dataset[normal_mapping[label], :, :, :] = image
+            if label not in seen:
+                image = Image.open(path).convert('RGB')
+                image = transform(image)
+                sample_img_dataset[normal_mapping[label], :, :, :] = image
+                seen.append(label)
             
     tpaths0=[]
     for dirname, _, filenames in os.walk(test_path):
         for filename in filenames:
             if filename[-4:]=='.jpg':
                 path=os.path.join(dirname, filename)
-                label=dirname.split('\\')[-1]
+                label=dirname.split('/')[-1]
                 if label == '.ipynb_checkpoints':
                     continue
                 tpaths0+=[(path,normal_mapping[label])]
