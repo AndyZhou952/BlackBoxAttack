@@ -28,9 +28,10 @@ class ImageDataset(Dataset):
 # (1): Download dataset fron Kaggle: https://www.kaggle.com/datasets/gpiosenka/butterfly-images40-species?select=train
 # (2): Unzip the downloaded dataset to './data/butterfly'
 # (3): Run the function
-def create_butterfly_dataset(path = './data/butterfly/'):
+def create_butterfly_dataset(path = './data/butterfly/', img_reshape=(3, 224, 224)):
+    C, H, W = img_reshape
     transform = transforms.Compose([
-                                    transforms.Resize((224,224)),
+                                    transforms.Resize((H, W)),
                                     transforms.ToTensor()])
       
     train_path = path + 'train'
@@ -42,7 +43,8 @@ def create_butterfly_dataset(path = './data/butterfly/'):
     reverse_mapping=dict(zip(N,class_names))
 
     paths0=[]
-    image_dict = {}
+    # store an image for each class for adversarial attack
+    sample_img_dataset = torch.zeros((len(class_names), C, H, W))
     for dirname, _, filenames in os.walk(train_path):
         for filename in filenames:
             if filename[-4:]=='.jpg':
@@ -51,10 +53,10 @@ def create_butterfly_dataset(path = './data/butterfly/'):
                 if label == '.ipynb_checkpoints':
                     continue
                 paths0+=[(path,normal_mapping[label])]
-                if label not in image_dict:
+                if label not in sample_img_dataset:
                     image = Image.open(path).convert('RGB')
-                    image_tensor = transform(image)
-                    image_dict[label] = image_tensor
+                    image = transform(image)
+                    sample_img_dataset[normal_mapping[label], :, :, :] = image
             
     tpaths0=[]
     for dirname, _, filenames in os.walk(test_path):
@@ -73,4 +75,4 @@ def create_butterfly_dataset(path = './data/butterfly/'):
     trainset = ImageDataset(paths0, transform)
     testset = ImageDataset(tpaths0, transform)
     
-    return trainset, testset, normal_mapping, reverse_mapping, image_dict
+    return trainset, testset, normal_mapping, reverse_mapping, sample_img_dataset

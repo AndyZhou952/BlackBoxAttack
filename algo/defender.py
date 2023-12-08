@@ -73,3 +73,23 @@ class AAAProtectedClassifier(nn.Module):
                                AAA_type=self.AAA_type)
         
         return protected_logits
+    
+    
+    
+class PartialInfo(nn.Module):
+    def __init__(self, model,  k):
+        super().__init__()
+        self.model = model
+        self.k = k
+        
+    def forward(self, x):
+        # x: image batch of dimension (batch_size, C, H, W)
+        x = x.to(device = next(self.model.parameters()).device)
+        self.model.eval()
+        with torch.no_grad():
+            logits = self.model(x)
+        threshold = torch.topk(logits, self.k, dim=1).values[:, k-1]
+        threshold = threshold.unsqueeze(1).expand_as(logits)
+        logits[logits < threshold] = float('nan')
+        
+        return logits
