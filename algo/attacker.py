@@ -311,8 +311,6 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
                 else:
                     gradient = NES(model, y_adv, x_adv, search_var, sample_num, k=k)
                 
-                # exp
-                gradient = torch.sign(gradient)
                 
                 eta = eta_max
                 # x_adv_hat = x_adv + eta * gradient
