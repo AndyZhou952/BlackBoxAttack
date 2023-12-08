@@ -89,9 +89,8 @@ class PartialInfo(nn.Module):
         with torch.no_grad():
             logits = self.model(x)
         # threshold: (batch_size, 1)
-        threshold = torch.topk(logits, self.k, dim=1).values[:, k-1]
+        threshold = torch.topk(logits, self.k, dim=1).values[:, self.k-1]
         # threshold: (batch_size, 100)
         threshold = threshold.unsqueeze(1).expand_as(logits)
         logits[logits < threshold] = float('nan')
-        
         return logits

@@ -50,7 +50,7 @@ def create_butterfly_dataset(path = './data/butterfly/', img_reshape=(3, 224, 22
         for filename in filenames:
             if filename[-4:]=='.jpg':
                 path=os.path.join(dirname, filename)
-                label=dirname.split('/')[-1]
+                label=dirname.split('\\')[-1]
                 if label == '.ipynb_checkpoints':
                     continue
                 paths0+=[(path,normal_mapping[label])]
@@ -65,7 +65,7 @@ def create_butterfly_dataset(path = './data/butterfly/', img_reshape=(3, 224, 22
         for filename in filenames:
             if filename[-4:]=='.jpg':
                 path=os.path.join(dirname, filename)
-                label=dirname.split('/')[-1]
+                label=dirname.split('\\')[-1]
                 if label == '.ipynb_checkpoints':
                     continue
                 tpaths0+=[(path,normal_mapping[label])]
