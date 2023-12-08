@@ -93,4 +93,5 @@ class PartialInfo(nn.Module):
         # threshold: (batch_size, 100)
         threshold = threshold.unsqueeze(1).expand_as(logits)
         logits[logits < threshold] = float('nan')
+        
         return logits

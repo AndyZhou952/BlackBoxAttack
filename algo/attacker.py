@@ -3,32 +3,13 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-# def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
-#     model.eval()
-    
-#     # image: (1, C, H, W)
-#     _, C, H, W = image.size()
-#     device = image.device
-
-#     # u: (n, C, H, W)
-#     u = torch.randn((sample_num, C, H, W), device=device)
-
-#     with torch.no_grad():
-#         # (n, C, H, W) = (1, C, H, W) + (n, C, H, W)
-#         perturbed_images = image + u * search_var
-
-#         # target_class: (0) scaler tensor
-#         # proxy_prob: (n, )
-#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
-        
-#         # prob * concat_u: (n,1, 1, 1) * (n, C, H, W) = (n, C, H, W)
-#         g_pos = torch.sum(proxy_prob.view(-1, 1, 1, 1) * u, dim=0) / (sample_num * search_var)
-
-#         perturbed_images = image - u * search_var
-#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
-#         g_neg = torch.sum(-proxy_prob.view(-1, 1, 1, 1) * u, dim=0) / (sample_num * search_var)
-        
-#     return g_pos/2 + g_neg /2
+def mask_top_k(output, k):
+    # output: (batch_size, K)
+    threshold = torch.topk(output, k, dim=1).values[:, k-1]
+    # threshold: (batch_size, 100)
+    threshold = threshold.unsqueeze(1).expand_as(output)
+    output[output < threshold] = float('nan')
+    return output 
 
 def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
     model.eval()
@@ -87,8 +68,35 @@ def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
 
 #     return g
 
+# def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
+#     model.eval()
+    
+#     # image: (1, C, H, W)
+#     _, C, H, W = image.size()
+#     device = image.device
 
-def NES(model, target_class, image, search_var, sample_num):
+#     # u: (n, C, H, W)
+#     u = torch.randn((sample_num, C, H, W), device=device)
+
+#     with torch.no_grad():
+#         # (n, C, H, W) = (1, C, H, W) + (n, C, H, W)
+#         perturbed_images = image + u * search_var
+
+#         # target_class: (0) scaler tensor
+#         # proxy_prob: (n, )
+#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
+        
+#         # prob * concat_u: (n,1, 1, 1) * (n, C, H, W) = (n, C, H, W)
+#         g_pos = torch.sum(proxy_prob.view(-1, 1, 1, 1) * u, dim=0) / (sample_num * search_var)
+
+#         perturbed_images = image - u * search_var
+#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
+#         g_neg = torch.sum(-proxy_prob.view(-1, 1, 1, 1) * u, dim=0) / (sample_num * search_var)
+        
+#     return g_pos/2 + g_neg /2
+
+
+def NES(model, target_class, image, search_var, sample_num, k=None):
     #NES estimation
     model.eval()
     
@@ -101,7 +109,11 @@ def NES(model, target_class, image, search_var, sample_num):
     with torch.no_grad():
         # model output of dimension (2n, K)
         # prob of dimension (2n, 1, 1, 1)
-        prob = F.softmax(model(image + concat_u * search_var), dim =1)[:,target_class].view(-1, 1, 1, 1)
+        
+        output = F.softmax(model(image + concat_u * search_var), dim =1)
+        if k is not None:
+            output = mask_top_k(output, k)
+        prob = output[:,target_class].view(-1, 1, 1, 1)
         # g of dimension (C, H, W)
         # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
         g = torch.nanmean(prob * concat_u, dim=0) / search_var
@@ -157,8 +169,8 @@ def get_rank_of_target(model, image, target_class, k = 5):
     with torch.no_grad():
         output = model(image)
         # output: (batch_size, K) <-- Big K: number of classes
-        output = torch.nan_to_num(output, nan=0.0)
         probabilities = F.softmax(output, dim = 1)
+        
         # top_classes: (batch_size, k) <-- small k: top k
         top_probs, top_classes = torch.topk(probabilities, k)
         # target_class: (0) scalar tensor
@@ -269,7 +281,10 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
     batch_size, C, H, W = images.size()
     
     # dimension: (batch_size, 100) -> (batch_size, )
-    target_classes = torch.topk(F.softmax(model(images), dim=1), dim= 1, largest=True, sorted=True, k=2).indices[:, 1]
+    output = model(images)
+    
+    # target_classes = torch.topk(F.softmax(output, dim=1), dim= 1, largest=True, sorted=True, k=2).indices[:, 1]
+    target_classes = torch.topk(F.softmax(output, dim=1), dim= 1, largest=True, sorted=True, k=5).indices[:, 1]
     
     query_counts = torch.zeros(batch_size)
     adv_images = list()
@@ -280,8 +295,10 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
             # y_adv: (0) scaler tensor
             y_adv = target_classes[i]
             x_adv = sample_img_dataset[y_adv, :, :, :].unsqueeze(0).to(device)
+            
             x_adv = torch.clamp(x_adv, x - epsilon, x + epsilon)
-
+            x_adv = torch.clamp(x_adv, 0, 1)
+            
             query_count = 0
             # stopping criteria: target epsilon within the original image & the classification is the target class
             
@@ -292,20 +309,29 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
                 if label_only:
                     gradient = NES_label_only(model, x_adv,y_adv, search_var,sample_num,  m, mu, k)
                 else:
-                    gradient = NES(model, y_adv, x_adv, search_var, sample_num)
-
+                    gradient = NES(model, y_adv, x_adv, search_var, sample_num, k=k)
+                
+                # exp
+                gradient = torch.sign(gradient)
+                
                 eta = eta_max
-                # x_adv_hat = x_adv - eta * gradient
-                x_adv_hat = x_adv + eta * gradient
-                while not get_rank_of_target(model, x_adv_hat, y_adv, k):
+                # x_adv_hat = x_adv + eta * gradient
+                x_adv_hat = torch.clamp(x_adv + eta * gradient, x - epsilon, x + epsilon)
+                x_adv_hat = torch.clamp(x_adv_hat, 0, 1)
+                
+                # while not get_rank_of_target(model, x_adv_hat, y_adv, k):
+                while not get_rank_of_target(model, x_adv_hat, y_adv, 1):
                     if eta < eta_min:
                         epsilon += delta
                         delta /= 2
                         x_adv_hat = x_adv
                         break
                     eta /= 2
-                    # x_adv_hat = torch.clamp(x_adv - eta * gradient, x - epsilon, x + epsilon)
                     x_adv_hat = torch.clamp(x_adv + eta * gradient, x - epsilon, x + epsilon)
+                    x_adv_hat = torch.clamp(x_adv_hat, 0, 1)
+                    
+                # x_adv_hat = torch.clamp(x_adv_hat, x - epsilon, x + epsilon)
+                # x_adv_hat = torch.clamp(x_adv_hat, 0, 1)
                     
                 x_adv = x_adv_hat
                 epsilon -= delta
@@ -314,12 +340,16 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
                     query_count += 2 * sample_num * m
                 else:
                     query_count += 2 * sample_num
-                
+                    
+                if epsilon < 0:
+                    break
                 
             query_counts[i] = query_count
             adv_images.append(x_adv)
 
     return torch.concat(adv_images, dim = 0), query_counts
+
+
 
 
 # def NES_partial_info(model, target_class, image, search_var, sample_num, k):
