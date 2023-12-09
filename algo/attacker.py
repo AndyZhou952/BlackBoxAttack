@@ -40,60 +40,6 @@ def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
 
     return g
 
-# def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
-#     model.eval()
-    
-#     # image: (1, C, H, W)
-#     _, C, H, W = image.size()
-#     device = image.device
-
-#     # u: (n, C, H, W)
-#     u = torch.randn((sample_num, C, H, W), device=device)
-
-#     # concat_u: [2n, C, H, W]
-#     concat_u = torch.cat([u, -u], dim=0)
-
-#     with torch.no_grad():
-#         # (2n, C, H, W) = (1, C, H, W) + (2n, C, H, W)
-#         perturbed_images = image + concat_u * search_var
-
-#         # target_class: (0) scaler tensor
-#         # proxy_prob: (2n, )
-#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
-        
-#         print(proxy_prob.shape)
-        
-#         # prob * concat_u: (2n,1, 1, 1) * (2n, C, H, W) = (2n, C, H, W)
-#         g = torch.sum(proxy_prob.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * sample_num * search_var)
-
-#     return g
-
-# def NES_label_only(model, image, target_class, search_var,sample_num, m, mu, k):
-#     model.eval()
-    
-#     # image: (1, C, H, W)
-#     _, C, H, W = image.size()
-#     device = image.device
-
-#     # u: (n, C, H, W)
-#     u = torch.randn((sample_num, C, H, W), device=device)
-
-#     with torch.no_grad():
-#         # (n, C, H, W) = (1, C, H, W) + (n, C, H, W)
-#         perturbed_images = image + u * search_var
-
-#         # target_class: (0) scaler tensor
-#         # proxy_prob: (n, )
-#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
-        
-#         # prob * concat_u: (n,1, 1, 1) * (n, C, H, W) = (n, C, H, W)
-#         g_pos = torch.sum(proxy_prob.view(-1, 1, 1, 1) * u, dim=0) / (sample_num * search_var)
-
-#         perturbed_images = image - u * search_var
-#         proxy_prob = S_x(model, perturbed_images, target_class, mu, m, k)
-#         g_neg = torch.sum(-proxy_prob.view(-1, 1, 1, 1) * u, dim=0) / (sample_num * search_var)
-        
-#     return g_pos/2 + g_neg /2
 
 
 def NES(model, target_class, image, search_var, sample_num, k=None):
@@ -185,34 +131,6 @@ def get_rank_of_target(model, image, target_class, k = 5):
         # ranks: (batch_size)
         return ranks
     
-# def get_rank_of_target(model, image, target_class, k = 5):
-#     """
-#     return the rank of the target in the top-k predictions
-#     return 0 if the target class is not in the top-k
-    
-#     Expects 4D input
-#     """
-    
-#     device = next(model.parameters()).device
-#     # image: (batch_size, C, H, W)
-#     image = image.to(device)
-    
-#     with torch.no_grad():
-#         output = model(image)
-#         # output: (batch_size, K) <-- Big K: number of classes
-#         output = torch.nan_to_num(output, nan=0.0)
-#         probabilities = F.softmax(output, dim = 1)
-#         # top_classes: (batch_size, k) <-- small k: top k
-#         top_probs, top_classes = torch.topk(probabilities, k)
-#         # target_class: (0) scalar tensor
-        
-        
-#         if target_class in top_classes[0]:
-#             target_rank = (top_classes[0] == target_class).nonzero(as_tuple = True)[0].item() + 1
-#             return target_rank
-#         else:
-#             return 0
-
 def S_x(model, image, target_class, mu, m, k):
     
     # image: (n, C, H, W)
@@ -240,34 +158,7 @@ def S_x(model, image, target_class, mu, m, k):
     
     return R
 
-# def S_x(model, image, target_class, mu, m, k):
-    
-#     # image: (1, C, H, W)
-#     device = image.device
-#     _, C, H, W = image.size()
-    
-#     R_sum = 0.0
-    
-#     # delta: (m, C, H, W)
-#     delta = (torch.rand((m, C, H, W)) * 2 - 1) * mu
-#     perturbed_image = image + delta.to(device)
 
-#     # ranks: (m) 
-#     ranks = get_rank_of_target(model, perturbed_image, target_class, k)
-#     R = (5 - ranks) * (ranks > 0)
-#     # R_sum += k - rank if rank != 0 else 0
-        
-# #     for _ in range(m):
-# #         # delta: (m, 
-# #         delta = (torch.rand_like(image) * 2 - 1) * mu
-# #         perturbed_image = image + delta
-        
-# #         rank = get_rank_of_target(model, perturbed_image, target_class, k)
-# #         R_sum += k - rank if rank != 0 else 0
-    
-#     return R.to(float).mean() 
-
-# 
 def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon, 
                               delta, search_var, sample_num, eta_max, eta_min, bound, k, 
                               query_limit=30000, label_only=False, mu=None, m=None):
@@ -283,7 +174,6 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
     # dimension: (batch_size, 100) -> (batch_size, )
     output = model(images)
     
-    # target_classes = torch.topk(F.softmax(output, dim=1), dim= 1, largest=True, sorted=True, k=2).indices[:, 1]
     target_classes = torch.topk(F.softmax(output, dim=1), dim= 1, largest=True, sorted=True, k=5).indices[:, 1]
     
     query_counts = torch.zeros(batch_size)
@@ -327,9 +217,7 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
                     eta /= 2
                     x_adv_hat = torch.clamp(x_adv + eta * gradient, x - epsilon, x + epsilon)
                     x_adv_hat = torch.clamp(x_adv_hat, 0, 1)
-                    
-                # x_adv_hat = torch.clamp(x_adv_hat, x - epsilon, x + epsilon)
-                # x_adv_hat = torch.clamp(x_adv_hat, 0, 1)
+   
                     
                 x_adv = x_adv_hat
                 epsilon -= delta
@@ -347,30 +235,3 @@ def PIA_adversarial_generator(model, images, sample_img_dataset, epsilon,
 
     return torch.concat(adv_images, dim = 0), query_counts
 
-
-
-
-# def NES_partial_info(model, target_class, image, search_var, sample_num, k):
-#     model.eval()
-#     _, C, H, W = image.size()
-#     device = image.device
-#     # u: (n, C, H, W)
-#     u = torch.randn((sample_num, C,H,W)).to(image.device)
-    
-#     # cocnat_u: [2n, C, H, W]
-#     concat_u =  torch.cat([u , -u], dim=0)
-#     perturbed_images = image + concat_u * search_var
-#     perturbed_images = perturbed_images.view(-1, C, H, W)
-
-#     gradients = torch.zeros_like(image)
-#     with torch.no_grad():
-#         outputs = model(perturbed_images)
-#         top_probs, top_classes = torch.topk(F.softmax(outputs, dim=1), k)
-
-#         # subset for the parts where the target class is in the top k classes
-#         target_in_top_k = top_classes == target_class
-#         # TODO: when not exist then 0?
-
-#         g = torch.sum(target_probs.view(-1, 1, 1, 1) * concat_u, dim=0) / (2 * sample_num * search_var)
-
-#     return g
