@@ -3,22 +3,30 @@ import torch.nn.functional as F
 from torch import nn
 import numpy as np
 
+
+def logit_margin(z, y):
+    z_clone = z.clone().detach()
+    z_clone.requires_grad = False
+    fy = z[:, y]
+    z_clone[:, y]= -1000
+    top_logits = torch.topk(z_clone, dim=1, k=1).values[:, 0]
+    return fy - top_logits
+
 # z: logits output from model
 # y: class label. If defender knows the true label, then use true label; otherwise, use prediction as label in loss
 # T: temperature, a hyper-parameter to tune. Pre-tune it using validation set.
-# L: model loss function. For multi-class classification, it is nn.CrossEntropyLoss()
 # alpha: magnitude of distortion
 # beta: trade-off parameter for denfense & confidence preservation
 # kappa: number of iterations for optimziation
 # AAA_type: 'sin' or 'lin'. See paper
-def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):    
+def AAA(z, y, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):    
     # z: (batch_size, K)
     # y: (batch_size, 1), integer encoding
     device = z.device
     z = z.detach()
     y = y.detach()
     
-    l_org = L(z, y)
+    l_org = logit_margin(z, y)
     l_atr = (torch.floor(l_org / tau) + 1/2) * tau
     if AAA_type == 'sin': 
         l_trg = l_org - alpha *  tau * torch.sin(torch.pi * ( 1 - 2 * (l_org - l_atr) / tau))
@@ -31,11 +39,11 @@ def AAA(z, y, L, alpha, tau, kappa, T, beta, lr, AAA_type='sin'):
     u = u.to(device)
     
     with torch.enable_grad():
-        optimizer = torch.optim.AdamW([u], lr=lr)
+        optimizer = torch.optim.Adam([u], lr=lr, betas=(0.9, 0.999))
 
         for i in range(kappa):
             optimizer.zero_grad()
-            loss = torch.abs(L(u, y) - l_trg) + beta * torch.abs(torch.max(F.softmax(u, dim=1))- p_trg)
+            loss = torch.abs(logit_margin(u, y) - l_trg) + beta * torch.abs(torch.max(F.softmax(u, dim=1))- p_trg)
             loss = loss.sum()
             loss.backward()
             optimizer.step()
@@ -53,7 +61,6 @@ class AAAProtectedClassifier(nn.Module):
         self.beta = beta
         self.lr = lr
         self.AAA_type = AAA_type
-        self.L = nn.CrossEntropyLoss(reduce=False)
         
     def forward(self, x):
         # x: image batch of dimension (batch_size, C, H, W)
@@ -63,7 +70,7 @@ class AAAProtectedClassifier(nn.Module):
             org_logits = self.model(x)
             pred_y = org_logits.argmax(dim=1)
         
-        protected_logits = AAA(z=org_logits, y=pred_y, L=self.L,
+        protected_logits = AAA(z=org_logits, y=pred_y,
                                alpha=self.alpha,
                                tau=self.tau,
                                kappa=self.kappa,
