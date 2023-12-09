@@ -30,6 +30,16 @@ Our study utilizes the three attck algorithms (query-limited, partial-info, labe
 
 (3) `data.py`: `ImageDataset` definition, create the Butterfly and ImageNet datasets with mapping and sample image dictionary for each class.
 
+4. `notebooks`:
+
+(1) `train_models.ipynb`: Scripts for training classifiers for the Butterfly and the ImageNet datasets respectively.
+
+(2) `eval_attacker-Butterfly.ipynb`, `eval_attacker-ImageNet.ipynb`: Test three attacks algorithm on the trained classifiers for both datasets.
+
+(3) `eval_attacker_defender-Butterfly.ipynb`, `eval_attacker_defender-ImageNet.ipynb`: Test the defense algorithm for both datasets.
+
+(4) `results.ipynb`: Generate the visualizations
+
 
 ## Reproducibility:
 
