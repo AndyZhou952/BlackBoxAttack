@@ -2,7 +2,7 @@
 
 This proejct was created for Duke University ECE 685D 2023 Fall. 
 
-Our study utilizes the three attck algorithms (query-limited, partial-info, label-only) proposed by Ilya et al. (2018) and the defense AAA algorithm by Chen et al. (2022) to explore both offensive and defensive aspects of Black-Box Adversarial Attacks. We first develop these algorithms implemented via the PyTorch framework. We then apply these strategies to two datasets: Tiny ImageNet (referred to as ImageNet) and Butterfly & Moths Image Classification (referred to as Butterfly). This approach is akin to the ancient Chinese fable of the ultimate spear versus the ultimate shield, testing the strength and effectiveness of each in a balanced confrontation. Our investigation aims to determine which prevails in the realm of neural network security: the spear of sophisticated adversarial attacks or the shield of robust defense mechanisms.
+Our study utilizes the three attck algorithms (query-limited, partial-info, label-only) proposed by Ilya et al. (2018) and the defense AAA algorithm by Chen et al. (2022) to explore both offensive and defensive aspects of Black-Box Adversarial Attacks. We develop these algorithms implemented via the PyTorch framework.
 
 ## File Description:
 
