@@ -151,7 +151,7 @@ def S_x(model, image, target_class, mu, m, k):
 
     # ranks: (n * m) 
     ranks = get_rank_of_target(model, perturbed_image, target_class, k)
-    R = (5 - ranks) * (ranks > 0)
+    R = (k - ranks) * (ranks > 0)
     
     # R: (n)
     R = R.view(n, m).to(float).mean(dim=1)
